@@ -1,19 +1,19 @@
 package com.mycompany.myapp.web.rest;
 
 import com.mycompany.myapp.domain.Task;
+import com.mycompany.myapp.domain.enumeration.TaskPriority;
 import com.mycompany.myapp.repository.TaskRepository;
 import com.mycompany.myapp.service.TaskService;
 import com.mycompany.myapp.web.rest.errors.BadRequestAlertException;
-import jakarta.validation.ConstraintViolation;
+import com.mycompany.myapp.web.rest.errors.TaskConcurrencyException;
+import com.mycompany.myapp.web.rest.errors.TaskNotFoundException;
 import jakarta.validation.Valid;
-import jakarta.validation.Validator;
-import jakarta.validation.constraints.NotNull;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,14 +27,11 @@ import tech.jhipster.web.util.HeaderUtil;
 import tech.jhipster.web.util.PaginationUtil;
 import tech.jhipster.web.util.ResponseUtil;
 
-/**
- * REST controller for managing {@link com.mycompany.myapp.domain.Task}.
- */
 @RestController
-@RequestMapping("/api/tasks")
+@RequestMapping("/api")
 public class TaskResource {
 
-    private static final Logger LOG = LoggerFactory.getLogger(TaskResource.class);
+    private final Logger log = LoggerFactory.getLogger(TaskResource.class);
 
     private static final String ENTITY_NAME = "task";
 
@@ -42,65 +39,50 @@ public class TaskResource {
     private String applicationName;
 
     private final TaskService taskService;
-
     private final TaskRepository taskRepository;
 
-    private final Validator validator;
-
-    public TaskResource(TaskService taskService, TaskRepository taskRepository, Validator validator) {
+    public TaskResource(TaskService taskService, TaskRepository taskRepository) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
-        this.validator = validator;
     }
 
-    /**
-     * {@code POST  /tasks} : Create a new task.
-     *
-     * @param task the task to create.
-     * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new task, or with status {@code 400 (Bad Request)} if the task has already an ID.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
-    @PostMapping("")
-    public ResponseEntity<Task> createTask(@RequestBody Task task) throws URISyntaxException {
-        LOG.debug("REST request to save Task : {}", task);
+    @PostMapping("/tasks")
+    public ResponseEntity<Task> createTask(@Valid @RequestBody Task task) throws URISyntaxException {
+        log.debug("REST request to save Task : {}", task);
         if (task.getId() != null) {
             throw new BadRequestAlertException("A new task cannot already have an ID", ENTITY_NAME, "idexists");
         }
-
-        // Set default values before validation
-        if (task.getCreatedDate() == null) {
-            task.setCreatedDate(java.time.Instant.now());
-        }
-        if (task.getCompleted() == null) {
-            task.setCompleted(false);
-        }
-
-        // Manual validation after setting defaults
-        Set<ConstraintViolation<Task>> violations = validator.validate(task);
-        if (!violations.isEmpty()) {
-            throw new BadRequestAlertException("Task validation failed", ENTITY_NAME, "validation");
-        }
-
-        task = taskService.save(task);
-        return ResponseEntity.created(new URI("/api/tasks/" + task.getId()))
-            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, task.getId().toString()))
-            .body(task);
+        Task result = taskService.createTask(task);
+        return ResponseEntity.created(new URI("/api/tasks/" + result.getId()))
+            .headers(HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, result.getId().toString()))
+            .body(result);
     }
 
-    /**
-     * {@code PUT  /tasks/:id} : Updates an existing task.
-     *
-     * @param id the id of the task to save.
-     * @param task the task to update.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated task,
-     * or with status {@code 400 (Bad Request)} if the task is not valid,
-     * or with status {@code 500 (Internal Server Error)} if the task couldn't be updated.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
-    @PutMapping("/{id}")
+    @PutMapping("/tasks")
+    public ResponseEntity<Task> updateTask(@Valid @RequestBody Task task) throws URISyntaxException {
+        log.debug("REST request to update Task : {}", task);
+        if (task.getId() == null) {
+            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+        }
+
+        if (!taskRepository.existsById(task.getId())) {
+            throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
+        }
+
+        try {
+            Task result = taskService.updateTask(task);
+            return ResponseEntity.ok()
+                .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, task.getId().toString()))
+                .body(result);
+        } catch (Exception e) {
+            throw new TaskConcurrencyException("Task was modified by another user");
+        }
+    }
+
+    @PutMapping("/tasks/{id}")
     public ResponseEntity<Task> updateTask(@PathVariable(value = "id", required = false) final Long id, @Valid @RequestBody Task task)
         throws URISyntaxException {
-        LOG.debug("REST request to update Task : {}, {}", id, task);
+        log.debug("REST request to update Task : {}, {}", id, task);
         if (task.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
@@ -109,133 +91,106 @@ public class TaskResource {
         }
 
         if (!taskRepository.existsById(id)) {
-            throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
+            throw new TaskNotFoundException("Task not found with id " + id);
         }
 
-        task = taskService.update(task);
-        return ResponseEntity.ok()
-            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, task.getId().toString()))
-            .body(task);
+        try {
+            Task result = taskService.updateTask(task);
+            return ResponseEntity.ok()
+                .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, task.getId().toString()))
+                .body(result);
+        } catch (Exception e) {
+            throw new TaskConcurrencyException("Task was modified by another user");
+        }
     }
 
-    /**
-     * {@code PATCH  /tasks/:id} : Partial updates given fields of an existing task, field will ignore if it is null
-     *
-     * @param id the id of the task to save.
-     * @param task the task to update.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated task,
-     * or with status {@code 400 (Bad Request)} if the task is not valid,
-     * or with status {@code 404 (Not Found)} if the task is not found,
-     * or with status {@code 500 (Internal Server Error)} if the task couldn't be updated.
-     * @throws URISyntaxException if the Location URI syntax is incorrect.
-     */
-    @PatchMapping(value = "/{id}", consumes = { "application/json", "application/merge-patch+json" })
-    public ResponseEntity<Task> partialUpdateTask(
-        @PathVariable(value = "id", required = false) final Long id,
-        @NotNull @RequestBody Task task
-    ) throws URISyntaxException {
-        LOG.debug("REST request to partial update Task partially : {}, {}", id, task);
-        if (task.getId() == null) {
-            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
-        }
-        if (!Objects.equals(id, task.getId())) {
-            throw new BadRequestAlertException("Invalid ID", ENTITY_NAME, "idinvalid");
-        }
-
-        if (!taskRepository.existsById(id)) {
-            throw new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound");
-        }
-
-        Optional<Task> result = taskService.partialUpdate(task);
-
-        return ResponseUtil.wrapOrNotFound(
-            result,
-            HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, task.getId().toString())
-        );
-    }
-
-    /**
-     * {@code GET  /tasks} : get all the tasks.
-     *
-     * @param pageable the pagination information.
-     * @param eagerload flag to eager load entities from relationships (This is applicable for many-to-many).
-     * @param completed filter by completion status (optional).
-     * @param currentUserOnly flag to get only current user's tasks.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of tasks in body.
-     */
-    @GetMapping("")
+    @GetMapping("/tasks")
     public ResponseEntity<List<Task>> getAllTasks(
         @org.springdoc.core.annotations.ParameterObject Pageable pageable,
-        @RequestParam(name = "eagerload", required = false, defaultValue = "true") boolean eagerload,
-        @RequestParam(name = "completed", required = false) Boolean completed,
-        @RequestParam(name = "currentUserOnly", required = false, defaultValue = "true") boolean currentUserOnly
+        @RequestParam(required = false) Boolean currentUserOnly
     ) {
-        LOG.debug("REST request to get a page of Tasks with completed filter: {} and currentUserOnly: {}", completed, currentUserOnly);
-        Page<Task> page;
-
-        if (currentUserOnly) {
-            if (completed != null) {
-                page = taskService.findAllByCurrentUserAndCompleted(completed, pageable);
-            } else {
-                page = taskService.findAllByCurrentUser(pageable);
-            }
+        log.debug("REST request to get all Tasks");
+        if (currentUserOnly != null && currentUserOnly) {
+            // Return only current user's tasks
+            List<Task> tasks = taskService.getAllTasksForCurrentUser();
+            return ResponseEntity.ok().body(tasks);
         } else {
-            if (eagerload) {
-                page = taskService.findAllWithEagerRelationships(pageable);
-            } else {
-                page = taskService.findAll(pageable);
-            }
+            // Return paginated tasks (existing behavior)
+            Page<Task> page = taskService.getAllTasks(pageable);
+            HttpHeaders headers = PaginationUtil.generatePaginationHttpHeaders(ServletUriComponentsBuilder.fromCurrentRequest(), page);
+            return ResponseEntity.ok().headers(headers).body(page.getContent());
         }
-
-        HttpHeaders headers = PaginationUtil.generatePaginationHttpHeaders(ServletUriComponentsBuilder.fromCurrentRequest(), page);
-        return ResponseEntity.ok().headers(headers).body(page.getContent());
     }
 
-    /**
-     * {@code GET  /tasks/:id} : get the "id" task.
-     *
-     * @param id the id of the task to retrieve.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the task, or with status {@code 404 (Not Found)}.
-     */
-    @GetMapping("/{id}")
-    public ResponseEntity<Task> getTask(@PathVariable("id") Long id) {
-        LOG.debug("REST request to get Task : {}", id);
-        Optional<Task> task = taskService.findOne(id);
-        return ResponseUtil.wrapOrNotFound(task);
+    @GetMapping("/tasks/{id}")
+    public ResponseEntity<Task> getTask(@PathVariable Long id) {
+        log.debug("REST request to get Task : {}", id);
+        Optional<Task> task = taskService.getTask(id);
+        if (task.isEmpty()) {
+            throw new TaskNotFoundException("Task not found with id " + id);
+        }
+        return ResponseEntity.ok(task.orElseThrow(() -> new TaskNotFoundException("Task not found with id " + id)));
     }
 
-    /**
-     * {@code DELETE  /tasks/:id} : delete the "id" task.
-     *
-     * @param id the id of the task to delete.
-     * @return the {@link ResponseEntity} with status {@code 204 (NO_CONTENT)}.
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable("id") Long id) {
-        LOG.debug("REST request to delete Task : {}", id);
-        taskService.delete(id);
+    @DeleteMapping("/tasks/{id}")
+    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
+        log.debug("REST request to delete Task : {}", id);
+        if (!taskRepository.existsById(id)) {
+            throw new TaskNotFoundException("Task not found with id " + id);
+        }
+        taskService.deleteTask(id);
         return ResponseEntity.noContent()
             .headers(HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()))
             .build();
     }
 
-    /**
-     * {@code PATCH /tasks/:id/toggle-completion} : toggle the completion status of a task.
-     *
-     * @param id the id of the task to toggle.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the updated task.
-     */
-    @PatchMapping("/{id}/toggle-completion")
-    public ResponseEntity<Task> toggleTaskCompletion(@PathVariable("id") Long id) {
-        LOG.debug("REST request to toggle completion of Task : {}", id);
+    @PutMapping("/tasks/{id}/toggle")
+    public ResponseEntity<Task> toggleTaskCompletion(@PathVariable Long id) {
+        log.debug("REST request to toggle Task completion : {}", id);
+        if (!taskRepository.existsById(id)) {
+            throw new TaskNotFoundException("Task not found with id " + id);
+        }
+        Task result = taskService.toggleTaskCompletion(id);
+        return ResponseEntity.ok().body(result);
+    }
 
-        Task task = taskService.findOne(id).orElseThrow(() -> new BadRequestAlertException("Entity not found", ENTITY_NAME, "idnotfound"));
+    @GetMapping("/tasks/filter")
+    public ResponseEntity<List<Task>> getFilteredTasks(
+        @RequestParam(required = false) TaskPriority priority,
+        @RequestParam(required = false) Boolean completed,
+        @RequestParam(required = false) LocalDate startDate,
+        @RequestParam(required = false) LocalDate endDate
+    ) {
+        log.debug("REST request to get filtered Tasks");
+        List<Task> tasks = taskService.getFilteredTasks(priority, completed, startDate, endDate);
+        return ResponseEntity.ok().body(tasks);
+    }
 
-        task.setCompleted(!task.getCompleted());
-        task = taskService.update(task);
+    @GetMapping("/tasks/search")
+    public ResponseEntity<List<Task>> searchTasks(@RequestParam String query) {
+        log.debug("REST request to search Tasks with query: {}", query);
+        List<Task> tasks = taskService.searchTasks(query);
+        return ResponseEntity.ok().body(tasks);
+    }
 
-        return ResponseEntity.ok()
-            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, task.getId().toString()))
-            .body(task);
+    @PatchMapping("/tasks")
+    public ResponseEntity<Task> partialUpdateTask(@RequestBody Task task) {
+        log.debug("REST request to partially update Task : {}", task);
+        if (task.getId() == null) {
+            throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
+        }
+
+        Task result = taskService.partialUpdateTask(task);
+        return ResponseEntity.ok().body(result);
+    }
+
+    @PatchMapping("/tasks/{id}/toggle-completion")
+    public ResponseEntity<Task> toggleTaskCompletionPatch(@PathVariable Long id) {
+        log.debug("REST request to toggle Task completion : {}", id);
+        if (!taskRepository.existsById(id)) {
+            throw new TaskNotFoundException("Task not found with id " + id);
+        }
+        Task result = taskService.toggleTaskCompletion(id);
+        return ResponseEntity.ok().body(result);
     }
 }

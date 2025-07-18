@@ -33,4 +33,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findOneWithAuthoritiesByEmailIgnoreCase(String email);
 
     Page<User> findAllByIdNotNullAndActivatedIsTrue(Pageable pageable);
+
+    /**
+     * Delete all users except the one with the given login.
+     *
+     * @param login the login to exclude from deletion
+     */
+    void deleteAllByLoginNot(String login);
 }

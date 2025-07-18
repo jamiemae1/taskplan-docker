@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import com.mycompany.myapp.IntegrationTest;
 import com.mycompany.myapp.domain.User;
 import com.mycompany.myapp.repository.UserRepository;
+import com.mycompany.myapp.web.rest.TestUtil;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -72,7 +73,7 @@ class UserServiceIT {
     void init() {
         user = new User();
         user.setLogin(DEFAULT_LOGIN);
-        user.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
+        user.setPassword(TestUtil.generateEncodedTestPassword());
         user.setActivated(true);
         user.setEmail(DEFAULT_EMAIL);
         user.setFirstName(DEFAULT_FIRSTNAME);

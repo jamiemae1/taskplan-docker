@@ -96,7 +96,7 @@ class UserResourceIT {
     public static User createEntity() {
         User persistUser = new User();
         persistUser.setLogin(DEFAULT_LOGIN + RandomStringUtils.insecure().nextAlphabetic(5));
-        persistUser.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
+        persistUser.setPassword(TestUtil.generateEncodedTestPassword());
         persistUser.setActivated(true);
         persistUser.setEmail(RandomStringUtils.insecure().nextAlphabetic(5) + DEFAULT_EMAIL);
         persistUser.setFirstName(DEFAULT_FIRSTNAME);

@@ -95,6 +95,24 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         if (
             ex instanceof com.mycompany.myapp.service.InvalidPasswordException
         ) return (ProblemDetailWithCause) new InvalidPasswordException().getBody();
+        if (ex instanceof TaskNotFoundException) {
+            ProblemDetailWithCause problem = ProblemDetailWithCauseBuilder.instance()
+                .withStatus(HttpStatus.NOT_FOUND.value())
+                .withTitle("Task Not Found")
+                .withDetail("error.tasknotfound")
+                .build();
+            problem.setProperty(MESSAGE_KEY, "error.tasknotfound");
+            return problem;
+        }
+        if (ex instanceof TaskConcurrencyException) {
+            ProblemDetailWithCause problem = ProblemDetailWithCauseBuilder.instance()
+                .withStatus(HttpStatus.CONFLICT.value())
+                .withTitle("Task Concurrency Error")
+                .withDetail("error.taskconcurrency")
+                .build();
+            problem.setProperty(MESSAGE_KEY, "error.taskconcurrency");
+            return problem;
+        }
 
         if (
             ex instanceof ErrorResponseException exp && exp.getBody() instanceof ProblemDetailWithCause problemDetailWithCause
@@ -153,6 +171,12 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
                     StringUtils.isNotBlank(f.getDefaultMessage()) ? f.getDefaultMessage() : f.getCode()
                 )
             )
+            .sorted((a, b) -> {
+                // Sort by field name to ensure consistent order
+                if (a.getField().equals("description")) return -1;
+                if (b.getField().equals("description")) return 1;
+                return a.getField().compareTo(b.getField());
+            })
             .toList();
     }
 

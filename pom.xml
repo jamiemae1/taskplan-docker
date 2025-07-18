@@ -12,7 +12,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.4</version>
+        <version>3.4.7</version>
         <relativePath/>
         <!-- lookup parent from repository -->
     </parent>
@@ -246,6 +246,11 @@
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.cucumber</groupId>
@@ -619,6 +624,10 @@
                         <systemPropertyVariables>
                             <java.util.logging.config.file>src/test/resources/logback.xml</java.util.logging.config.file>
                         </systemPropertyVariables>
+                        <!-- Optimize test execution to prevent context cache failures -->
+                        <forkCount>1</forkCount>
+                        <reuseForks>true</reuseForks>
+                        <argLine>@{argLine} -Xmx2G -XX:+UseG1GC</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -833,6 +842,13 @@
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco-maven-plugin.version}</version>
                     <executions>
+                        <execution>
+                            <id>default-report</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
                         <execution>
                             <id>pre-unit-tests</id>
                             <goals>

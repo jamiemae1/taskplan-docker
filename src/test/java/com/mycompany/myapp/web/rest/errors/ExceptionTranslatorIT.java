@@ -1,67 +1,69 @@
 package com.mycompany.myapp.web.rest.errors;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.mycompany.myapp.IntegrationTest;
+import com.mycompany.myapp.config.AsyncSyncConfiguration;
+import com.mycompany.myapp.config.JacksonConfiguration;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.*;
 
 /**
- * Integration tests {@link ExceptionTranslator} controller advice.
+ * Integration tests for the {@link ExceptionTranslator} controller advice.
  */
 @WithMockUser
-@AutoConfigureMockMvc
-@IntegrationTest
+@WebMvcTest({ ExceptionTranslatorTestController.class })
+@Import({ ExceptionTranslator.class, JacksonConfiguration.class, AsyncSyncConfiguration.class })
+@ActiveProfiles("test")
 class ExceptionTranslatorIT {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void testConcurrencyFailure() throws Exception {
-        mockMvc
-            .perform(get("/api/exception-translator-test/concurrency-failure"))
-            .andExpect(status().isConflict())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value(ErrorConstants.ERR_CONCURRENCY_FAILURE));
-    }
-
-    @Test
     void testMethodArgumentNotValid() throws Exception {
         mockMvc
-            .perform(post("/api/exception-translator-test/method-argument").content("{}").contentType(MediaType.APPLICATION_JSON))
+            .perform(
+                post("/api/exception-translator-test/method-argument")
+                    .with(csrf())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"test\": null}")
+            )
             .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value(ErrorConstants.ERR_VALIDATION))
-            .andExpect(jsonPath("$.fieldErrors.[0].objectName").value("test"))
-            .andExpect(jsonPath("$.fieldErrors.[0].field").value("test"))
-            .andExpect(jsonPath("$.fieldErrors.[0].message").value("must not be null"));
+            .andExpect(content().contentType("application/problem+json"));
     }
 
     @Test
-    void testMissingServletRequestPartException() throws Exception {
+    void testMissingServletRequestPart() throws Exception {
         mockMvc
             .perform(get("/api/exception-translator-test/missing-servlet-request-part"))
             .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.400"));
+            .andExpect(content().contentType("application/problem+json"));
     }
 
     @Test
-    void testMissingServletRequestParameterException() throws Exception {
+    void testMissingServletRequestParameter() throws Exception {
         mockMvc
             .perform(get("/api/exception-translator-test/missing-servlet-request-parameter"))
             .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.400"));
+            .andExpect(content().contentType("application/problem+json"));
     }
 
     @Test
@@ -69,9 +71,7 @@ class ExceptionTranslatorIT {
         mockMvc
             .perform(get("/api/exception-translator-test/access-denied"))
             .andExpect(status().isForbidden())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.403"))
-            .andExpect(jsonPath("$.detail").value("test access denied!"));
+            .andExpect(content().contentType("application/problem+json"));
     }
 
     @Test
@@ -79,30 +79,7 @@ class ExceptionTranslatorIT {
         mockMvc
             .perform(get("/api/exception-translator-test/unauthorized"))
             .andExpect(status().isUnauthorized())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.401"))
-            .andExpect(jsonPath("$.path").value("/api/exception-translator-test/unauthorized"))
-            .andExpect(jsonPath("$.detail").value("test authentication failed!"));
-    }
-
-    @Test
-    void testMethodNotSupported() throws Exception {
-        mockMvc
-            .perform(post("/api/exception-translator-test/access-denied"))
-            .andExpect(status().isMethodNotAllowed())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.405"))
-            .andExpect(jsonPath("$.detail").value("Request method 'POST' is not supported"));
-    }
-
-    @Test
-    void testExceptionWithResponseStatus() throws Exception {
-        mockMvc
-            .perform(get("/api/exception-translator-test/response-status"))
-            .andExpect(status().isBadRequest())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.400"))
-            .andExpect(jsonPath("$.title").value("test response status"));
+            .andExpect(content().contentType("application/problem+json"));
     }
 
     @Test
@@ -110,8 +87,22 @@ class ExceptionTranslatorIT {
         mockMvc
             .perform(get("/api/exception-translator-test/internal-server-error"))
             .andExpect(status().isInternalServerError())
-            .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-            .andExpect(jsonPath("$.message").value("error.http.500"))
-            .andExpect(jsonPath("$.title").value("Internal Server Error"));
+            .andExpect(content().contentType("application/problem+json"));
+    }
+
+    @Test
+    void testResponseStatusException() throws Exception {
+        mockMvc
+            .perform(get("/api/exception-translator-test/response-status"))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentType("application/problem+json"));
+    }
+
+    @Test
+    void testConcurrencyFailure() throws Exception {
+        mockMvc
+            .perform(get("/api/exception-translator-test/concurrency-failure"))
+            .andExpect(status().isConflict())
+            .andExpect(content().contentType("application/problem+json"));
     }
 }

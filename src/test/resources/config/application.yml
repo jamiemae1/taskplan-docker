@@ -18,7 +18,7 @@ spring:
     name: taskplanDocker
   # Replace by 'prod, faker' to add the faker context and have sample data loaded in production
   liquibase:
-    contexts: test
+    contexts: test, faker
   jackson:
     serialization:
       write-durations-as-timestamps: false
@@ -47,6 +47,12 @@ spring:
         size: 20
   thymeleaf:
     mode: HTML
+  test:
+    context:
+      cache:
+        max-size: 32
+    database:
+      replace: none
 
 server:
   port: 10344

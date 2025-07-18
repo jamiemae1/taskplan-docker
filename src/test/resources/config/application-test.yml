@@ -1,0 +1,107 @@
+# ===================================================================
+# Spring Boot configuration for simple integration tests.
+#
+# This configuration is used for tests that don't need the full application context
+# and can use an in-memory H2 database.
+# ===================================================================
+
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    username: sa
+    password:
+    hikari:
+      auto-commit: false
+      poolName: Hikari
+      maximum-pool-size: 1
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+        implicit-strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+    properties:
+      hibernate.id.new_generator_mappings: true
+      hibernate.connection.provider_disables_autocommit: true
+      hibernate.cache.use_second_level_cache: false
+      hibernate.cache.use_query_cache: false
+      hibernate.generate_statistics: false
+      hibernate.type.preferred_instant_jdbc_type: TIMESTAMP
+      hibernate.jdbc.time_zone: UTC
+      hibernate.timezone.default_storage: NORMALIZE
+      hibernate.query.fail_on_pagination_over_collection_fetch: true
+  liquibase:
+    enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          authority-prefix: ''
+          authorities-claim-name: auth
+  main:
+    allow-bean-definition-overriding: true
+    lazy-initialization: true
+  messages:
+    basename: i18n/messages
+  task:
+    execution:
+      thread-name-prefix: taskplan-docker-task-
+      pool:
+        core-size: 1
+        max-size: 50
+        queue-capacity: 10000
+    scheduling:
+      thread-name-prefix: taskplan-docker-scheduling-
+      pool:
+        size: 20
+  thymeleaf:
+    mode: HTML
+  mail:
+    host: localhost
+    port: 3025
+    username: test
+    password: test
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+server:
+  port: 10344
+  address: localhost
+
+jhipster:
+  clientApp:
+    name: 'taskplanDockerApp'
+  mail:
+    from: taskplanDocker@localhost.com
+    base-url: http://127.0.0.1:8080
+  logging:
+    use-json-format: false
+    logstash:
+      enabled: false
+      host: localhost
+      port: 5000
+      ring-buffer-size: 512
+  security:
+    authentication:
+      jwt:
+        base64-secret: ZmRiNjZkYTE2NjE1MjU5YTQ3Y2VmYmZhYTIyOWQyNmRlMjZmMWZiYjhkMTEyNDVkYWUwMzRkMWZkMzU1OTRhODNkM2I2MjIzMTEwMGNlNmZhMjBmYzgzYjZlODA4ZTE3MTM1NmMwYTc3MWY0MGYzNDQ2NWFmYmI5MmRlZTEwMmY=
+        token-validity-in-seconds: 86400
+        token-validity-in-seconds-for-remember-me: 86400
+
+management:
+  health:
+    mail:
+      enabled: false

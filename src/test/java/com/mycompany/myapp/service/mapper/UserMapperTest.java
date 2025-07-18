@@ -4,176 +4,438 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mycompany.myapp.domain.Authority;
 import com.mycompany.myapp.domain.User;
-import com.mycompany.myapp.security.AuthoritiesConstants;
 import com.mycompany.myapp.service.dto.AdminUserDTO;
 import com.mycompany.myapp.service.dto.UserDTO;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import org.apache.commons.lang3.RandomStringUtils;
+import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Unit tests for {@link UserMapper}.
- */
 class UserMapperTest {
 
-    private static final String DEFAULT_LOGIN = "johndoe";
-    private static final Long DEFAULT_ID = 1L;
-
     private UserMapper userMapper;
-    private User user;
-    private AdminUserDTO userDto;
 
     @BeforeEach
-    void init() {
+    void setUp() {
         userMapper = new UserMapper();
-        user = new User();
-        user.setLogin(DEFAULT_LOGIN);
-        user.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
-        user.setActivated(true);
-        user.setEmail("johndoe@localhost");
-        user.setFirstName("john");
-        user.setLastName("doe");
-        user.setImageUrl("image_url");
-        user.setCreatedBy(DEFAULT_LOGIN);
-        user.setCreatedDate(Instant.now());
-        user.setLastModifiedBy(DEFAULT_LOGIN);
-        user.setLastModifiedDate(Instant.now());
-        user.setLangKey("en");
+    }
 
-        Set<Authority> authorities = new HashSet<>();
-        Authority authority = new Authority();
-        authority.setName(AuthoritiesConstants.USER);
-        authorities.add(authority);
-        user.setAuthorities(authorities);
+    @Test
+    void testUsersToUserDTOs() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        User user2 = createTestUser(2L, "user2", "user2@example.com");
+        List<User> users = Arrays.asList(user1, user2);
 
-        userDto = new AdminUserDTO(user);
+        // When
+        List<UserDTO> userDTOs = userMapper.usersToUserDTOs(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(2);
+        assertThat(userDTOs.get(0).getId()).isEqualTo(1L);
+        assertThat(userDTOs.get(0).getLogin()).isEqualTo("user1");
+        assertThat(userDTOs.get(1).getId()).isEqualTo(2L);
+        assertThat(userDTOs.get(1).getLogin()).isEqualTo("user2");
+    }
+
+    @Test
+    void testUsersToUserDTOsWithNullUser() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        List<User> users = Arrays.asList(user1, null);
+
+        // When
+        List<UserDTO> userDTOs = userMapper.usersToUserDTOs(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(1);
+        assertThat(userDTOs.get(0).getId()).isEqualTo(1L);
+        assertThat(userDTOs.get(0).getLogin()).isEqualTo("user1");
+    }
+
+    @Test
+    void testUsersToUserDTOsWithEmptyList() {
+        // Given
+        List<User> users = Collections.emptyList();
+
+        // When
+        List<UserDTO> userDTOs = userMapper.usersToUserDTOs(users);
+
+        // Then
+        assertThat(userDTOs).isEmpty();
     }
 
     @Test
     void testUserToUserDTO() {
-        AdminUserDTO convertedUserDto = userMapper.userToAdminUserDTO(user);
+        // Given
+        User user = createTestUser(1L, "testuser", "test@example.com");
 
-        assertThat(convertedUserDto.getId()).isEqualTo(user.getId());
-        assertThat(convertedUserDto.getLogin()).isEqualTo(user.getLogin());
-        assertThat(convertedUserDto.getFirstName()).isEqualTo(user.getFirstName());
-        assertThat(convertedUserDto.getLastName()).isEqualTo(user.getLastName());
-        assertThat(convertedUserDto.getEmail()).isEqualTo(user.getEmail());
-        assertThat(convertedUserDto.isActivated()).isEqualTo(user.isActivated());
-        assertThat(convertedUserDto.getImageUrl()).isEqualTo(user.getImageUrl());
-        assertThat(convertedUserDto.getCreatedBy()).isEqualTo(user.getCreatedBy());
-        assertThat(convertedUserDto.getCreatedDate()).isEqualTo(user.getCreatedDate());
-        assertThat(convertedUserDto.getLastModifiedBy()).isEqualTo(user.getLastModifiedBy());
-        assertThat(convertedUserDto.getLastModifiedDate()).isEqualTo(user.getLastModifiedDate());
-        assertThat(convertedUserDto.getLangKey()).isEqualTo(user.getLangKey());
-        assertThat(convertedUserDto.getAuthorities()).containsExactly(AuthoritiesConstants.USER);
+        // When
+        UserDTO userDTO = userMapper.userToUserDTO(user);
+
+        // Then
+        assertThat(userDTO).isNotNull();
+        assertThat(userDTO.getId()).isEqualTo(1L);
+        assertThat(userDTO.getLogin()).isEqualTo("testuser");
     }
 
     @Test
-    void testUserDTOtoUser() {
-        User convertedUser = userMapper.userDTOToUser(userDto);
+    void testUsersToAdminUserDTOs() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        User user2 = createTestUser(2L, "user2", "user2@example.com");
+        List<User> users = Arrays.asList(user1, user2);
 
-        assertThat(convertedUser.getId()).isEqualTo(userDto.getId());
-        assertThat(convertedUser.getLogin()).isEqualTo(userDto.getLogin());
-        assertThat(convertedUser.getFirstName()).isEqualTo(userDto.getFirstName());
-        assertThat(convertedUser.getLastName()).isEqualTo(userDto.getLastName());
-        assertThat(convertedUser.getEmail()).isEqualTo(userDto.getEmail());
-        assertThat(convertedUser.isActivated()).isEqualTo(userDto.isActivated());
-        assertThat(convertedUser.getImageUrl()).isEqualTo(userDto.getImageUrl());
-        assertThat(convertedUser.getLangKey()).isEqualTo(userDto.getLangKey());
-        assertThat(convertedUser.getCreatedBy()).isEqualTo(userDto.getCreatedBy());
-        assertThat(convertedUser.getCreatedDate()).isEqualTo(userDto.getCreatedDate());
-        assertThat(convertedUser.getLastModifiedBy()).isEqualTo(userDto.getLastModifiedBy());
-        assertThat(convertedUser.getLastModifiedDate()).isEqualTo(userDto.getLastModifiedDate());
-        assertThat(convertedUser.getAuthorities()).extracting("name").containsExactly(AuthoritiesConstants.USER);
+        // When
+        List<AdminUserDTO> adminUserDTOs = userMapper.usersToAdminUserDTOs(users);
+
+        // Then
+        assertThat(adminUserDTOs).hasSize(2);
+        assertThat(adminUserDTOs.get(0).getId()).isEqualTo(1L);
+        assertThat(adminUserDTOs.get(0).getLogin()).isEqualTo("user1");
+        assertThat(adminUserDTOs.get(1).getId()).isEqualTo(2L);
+        assertThat(adminUserDTOs.get(1).getLogin()).isEqualTo("user2");
     }
 
     @Test
-    void usersToUserDTOsShouldMapOnlyNonNullUsers() {
-        List<User> users = new ArrayList<>();
-        users.add(user);
-        users.add(null);
+    void testUsersToAdminUserDTOsWithNullUser() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        List<User> users = Arrays.asList(user1, null);
 
-        List<UserDTO> userDTOS = userMapper.usersToUserDTOs(users);
+        // When
+        List<AdminUserDTO> adminUserDTOs = userMapper.usersToAdminUserDTOs(users);
 
-        assertThat(userDTOS).isNotEmpty().size().isEqualTo(1);
+        // Then
+        assertThat(adminUserDTOs).hasSize(1);
+        assertThat(adminUserDTOs.get(0).getId()).isEqualTo(1L);
+        assertThat(adminUserDTOs.get(0).getLogin()).isEqualTo("user1");
     }
 
     @Test
-    void userDTOsToUsersShouldMapOnlyNonNullUsers() {
-        List<AdminUserDTO> usersDto = new ArrayList<>();
-        usersDto.add(userDto);
-        usersDto.add(null);
+    void testUserToAdminUserDTO() {
+        // Given
+        User user = createTestUser(1L, "testuser", "test@example.com");
 
-        List<User> users = userMapper.userDTOsToUsers(usersDto);
+        // When
+        AdminUserDTO adminUserDTO = userMapper.userToAdminUserDTO(user);
 
-        assertThat(users).isNotEmpty().size().isEqualTo(1);
+        // Then
+        assertThat(adminUserDTO).isNotNull();
+        assertThat(adminUserDTO.getId()).isEqualTo(1L);
+        assertThat(adminUserDTO.getLogin()).isEqualTo("testuser");
+        assertThat(adminUserDTO.getEmail()).isEqualTo("test@example.com");
     }
 
     @Test
-    void userDTOsToUsersWithAuthoritiesStringShouldMapToUsersWithAuthoritiesDomain() {
-        Set<String> authoritiesAsString = new HashSet<>();
-        authoritiesAsString.add("ADMIN");
-        userDto.setAuthorities(authoritiesAsString);
+    void testUserDTOsToUsers() {
+        // Given
+        AdminUserDTO userDTO1 = createTestAdminUserDTO(1L, "user1", "user1@example.com");
+        AdminUserDTO userDTO2 = createTestAdminUserDTO(2L, "user2", "user2@example.com");
+        List<AdminUserDTO> userDTOs = Arrays.asList(userDTO1, userDTO2);
 
-        List<AdminUserDTO> usersDto = new ArrayList<>();
-        usersDto.add(userDto);
+        // When
+        List<User> users = userMapper.userDTOsToUsers(userDTOs);
 
-        List<User> users = userMapper.userDTOsToUsers(usersDto);
-
-        assertThat(users).isNotEmpty().size().isEqualTo(1);
-        assertThat(users.get(0).getAuthorities()).isNotNull();
-        assertThat(users.get(0).getAuthorities()).isNotEmpty();
-        assertThat(users.get(0).getAuthorities().iterator().next().getName()).isEqualTo("ADMIN");
+        // Then
+        assertThat(users).hasSize(2);
+        assertThat(users.get(0).getId()).isEqualTo(1L);
+        assertThat(users.get(0).getLogin()).isEqualTo("user1");
+        assertThat(users.get(1).getId()).isEqualTo(2L);
+        assertThat(users.get(1).getLogin()).isEqualTo("user2");
     }
 
     @Test
-    void userDTOsToUsersMapWithNullAuthoritiesStringShouldReturnUserWithEmptyAuthorities() {
-        userDto.setAuthorities(null);
+    void testUserDTOsToUsersWithNullDTO() {
+        // Given
+        AdminUserDTO userDTO1 = createTestAdminUserDTO(1L, "user1", "user1@example.com");
+        List<AdminUserDTO> userDTOs = Arrays.asList(userDTO1, null);
 
-        List<AdminUserDTO> usersDto = new ArrayList<>();
-        usersDto.add(userDto);
+        // When
+        List<User> users = userMapper.userDTOsToUsers(userDTOs);
 
-        List<User> users = userMapper.userDTOsToUsers(usersDto);
-
-        assertThat(users).isNotEmpty().size().isEqualTo(1);
-        assertThat(users.get(0).getAuthorities()).isNotNull();
-        assertThat(users.get(0).getAuthorities()).isEmpty();
+        // Then
+        assertThat(users).hasSize(1);
+        assertThat(users.get(0).getId()).isEqualTo(1L);
+        assertThat(users.get(0).getLogin()).isEqualTo("user1");
     }
 
     @Test
-    void userDTOToUserMapWithAuthoritiesStringShouldReturnUserWithAuthorities() {
-        User convertedUser = userMapper.userDTOToUser(userDto);
+    void testUserDTOToUser() {
+        // Given
+        AdminUserDTO userDTO = createTestAdminUserDTO(1L, "testuser", "test@example.com");
+        userDTO.setFirstName("Test");
+        userDTO.setLastName("User");
+        userDTO.setImageUrl("http://example.com/image.jpg");
+        userDTO.setActivated(true);
+        userDTO.setLangKey("en");
+        userDTO.setCreatedBy("system");
+        userDTO.setCreatedDate(Instant.now());
+        userDTO.setLastModifiedBy("admin");
+        userDTO.setLastModifiedDate(Instant.now());
+        userDTO.setAuthorities(Set.of("ROLE_USER", "ROLE_ADMIN"));
 
-        assertThat(convertedUser).isNotNull();
-        assertThat(convertedUser.getAuthorities()).isNotNull();
-        assertThat(convertedUser.getAuthorities()).isNotEmpty();
-        assertThat(convertedUser.getAuthorities().iterator().next().getName()).isEqualTo(AuthoritiesConstants.USER);
+        // When
+        User user = userMapper.userDTOToUser(userDTO);
+
+        // Then
+        assertThat(user).isNotNull();
+        assertThat(user.getId()).isEqualTo(1L);
+        assertThat(user.getLogin()).isEqualTo("testuser");
+        assertThat(user.getEmail()).isEqualTo("test@example.com");
+        assertThat(user.getFirstName()).isEqualTo("Test");
+        assertThat(user.getLastName()).isEqualTo("User");
+        assertThat(user.getImageUrl()).isEqualTo("http://example.com/image.jpg");
+        assertThat(user.isActivated()).isTrue();
+        assertThat(user.getLangKey()).isEqualTo("en");
+        assertThat(user.getCreatedBy()).isEqualTo("system");
+        assertThat(user.getCreatedDate()).isNotNull();
+        assertThat(user.getLastModifiedBy()).isEqualTo("admin");
+        assertThat(user.getLastModifiedDate()).isNotNull();
+        assertThat(user.getAuthorities()).hasSize(2);
+        assertThat(user.getAuthorities().stream().map(Authority::getName)).containsExactlyInAnyOrder("ROLE_USER", "ROLE_ADMIN");
     }
 
     @Test
-    void userDTOToUserMapWithNullAuthoritiesStringShouldReturnUserWithEmptyAuthorities() {
-        userDto.setAuthorities(null);
+    void testUserDTOToUserWithNullDTO() {
+        // When
+        User user = userMapper.userDTOToUser(null);
 
-        User persistUser = userMapper.userDTOToUser(userDto);
-
-        assertThat(persistUser).isNotNull();
-        assertThat(persistUser.getAuthorities()).isNotNull();
-        assertThat(persistUser.getAuthorities()).isEmpty();
+        // Then
+        assertThat(user).isNull();
     }
 
     @Test
-    void userDTOToUserMapWithNullUserShouldReturnNull() {
-        assertThat(userMapper.userDTOToUser(null)).isNull();
+    void testUserDTOToUserWithNullAuthorities() {
+        // Given
+        AdminUserDTO userDTO = createTestAdminUserDTO(1L, "testuser", "test@example.com");
+        userDTO.setAuthorities(null);
+
+        // When
+        User user = userMapper.userDTOToUser(userDTO);
+
+        // Then
+        assertThat(user).isNotNull();
+        assertThat(user.getAuthorities()).isEmpty();
+    }
+
+    @Test
+    void testUserDTOToUserWithEmptyAuthorities() {
+        // Given
+        AdminUserDTO userDTO = createTestAdminUserDTO(1L, "testuser", "test@example.com");
+        userDTO.setAuthorities(Collections.emptySet());
+
+        // When
+        User user = userMapper.userDTOToUser(userDTO);
+
+        // Then
+        assertThat(user).isNotNull();
+        assertThat(user.getAuthorities()).isEmpty();
     }
 
     @Test
     void testUserFromId() {
-        assertThat(userMapper.userFromId(DEFAULT_ID).getId()).isEqualTo(DEFAULT_ID);
-        assertThat(userMapper.userFromId(null)).isNull();
+        // Given
+        Long id = 123L;
+
+        // When
+        User user = userMapper.userFromId(id);
+
+        // Then
+        assertThat(user).isNotNull();
+        assertThat(user.getId()).isEqualTo(123L);
+        assertThat(user.getLogin()).isNull();
+        assertThat(user.getEmail()).isNull();
+    }
+
+    @Test
+    void testUserFromIdWithNullId() {
+        // When
+        User user = userMapper.userFromId(null);
+
+        // Then
+        assertThat(user).isNull();
+    }
+
+    @Test
+    void testToDtoId() {
+        // Given
+        User user = createTestUser(1L, "testuser", "test@example.com");
+
+        // When
+        UserDTO userDTO = userMapper.toDtoId(user);
+
+        // Then
+        assertThat(userDTO).isNotNull();
+        assertThat(userDTO.getId()).isEqualTo(1L);
+        assertThat(userDTO.getLogin()).isNull(); // Should be null due to ignoreByDefault
+    }
+
+    @Test
+    void testToDtoIdWithNullUser() {
+        // When
+        UserDTO userDTO = userMapper.toDtoId(null);
+
+        // Then
+        assertThat(userDTO).isNull();
+    }
+
+    @Test
+    void testToDtoIdSet() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        User user2 = createTestUser(2L, "user2", "user2@example.com");
+        Set<User> users = Set.of(user1, user2);
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoIdSet(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(2);
+        assertThat(userDTOs.stream().map(UserDTO::getId)).containsExactlyInAnyOrder(1L, 2L);
+    }
+
+    @Test
+    void testToDtoIdSetWithNullSet() {
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoIdSet(null);
+
+        // Then
+        assertThat(userDTOs).isEmpty();
+    }
+
+    @Test
+    void testToDtoIdSetWithEmptySet() {
+        // Given
+        Set<User> users = Collections.emptySet();
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoIdSet(users);
+
+        // Then
+        assertThat(userDTOs).isEmpty();
+    }
+
+    @Test
+    void testToDtoLogin() {
+        // Given
+        User user = createTestUser(1L, "testuser", "test@example.com");
+
+        // When
+        UserDTO userDTO = userMapper.toDtoLogin(user);
+
+        // Then
+        assertThat(userDTO).isNotNull();
+        assertThat(userDTO.getId()).isEqualTo(1L);
+        assertThat(userDTO.getLogin()).isEqualTo("testuser");
+    }
+
+    @Test
+    void testToDtoLoginWithNullUser() {
+        // When
+        UserDTO userDTO = userMapper.toDtoLogin(null);
+
+        // Then
+        assertThat(userDTO).isNull();
+    }
+
+    @Test
+    void testToDtoLoginSet() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        User user2 = createTestUser(2L, "user2", "user2@example.com");
+        Set<User> users = Set.of(user1, user2);
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoLoginSet(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(2);
+        assertThat(userDTOs.stream().map(UserDTO::getId)).containsExactlyInAnyOrder(1L, 2L);
+        assertThat(userDTOs.stream().map(UserDTO::getLogin)).containsExactlyInAnyOrder("user1", "user2");
+    }
+
+    @Test
+    void testToDtoLoginSetWithNullSet() {
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoLoginSet(null);
+
+        // Then
+        assertThat(userDTOs).isEmpty();
+    }
+
+    @Test
+    void testToDtoLoginSetWithEmptySet() {
+        // Given
+        Set<User> users = Collections.emptySet();
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoLoginSet(users);
+
+        // Then
+        assertThat(userDTOs).isEmpty();
+    }
+
+    @Test
+    void testToDtoIdSetWithNullUser() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        Set<User> users = new HashSet<>();
+        users.add(user1);
+        users.add(null);
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoIdSet(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(2); // One valid user and one null becomes null UserDTO
+        assertThat(userDTOs.stream().filter(Objects::nonNull).map(UserDTO::getId)).containsExactly(1L);
+    }
+
+    @Test
+    void testToDtoLoginSetWithNullUser() {
+        // Given
+        User user1 = createTestUser(1L, "user1", "user1@example.com");
+        Set<User> users = new HashSet<>();
+        users.add(user1);
+        users.add(null);
+
+        // When
+        Set<UserDTO> userDTOs = userMapper.toDtoLoginSet(users);
+
+        // Then
+        assertThat(userDTOs).hasSize(2); // One valid user and one null becomes null UserDTO
+        assertThat(userDTOs.stream().filter(Objects::nonNull).map(UserDTO::getId)).containsExactly(1L);
+        assertThat(userDTOs.stream().filter(Objects::nonNull).map(UserDTO::getLogin)).containsExactly("user1");
+    }
+
+    private User createTestUser(Long id, String login, String email) {
+        User user = new User();
+        user.setId(id);
+        user.setLogin(login);
+        user.setEmail(email);
+        user.setActivated(true);
+        user.setLangKey("en");
+        user.setFirstName("Test");
+        user.setLastName("User");
+
+        Authority authority = new Authority();
+        authority.setName("ROLE_USER");
+        user.setAuthorities(Set.of(authority));
+
+        return user;
+    }
+
+    private AdminUserDTO createTestAdminUserDTO(Long id, String login, String email) {
+        AdminUserDTO userDTO = new AdminUserDTO();
+        userDTO.setId(id);
+        userDTO.setLogin(login);
+        userDTO.setEmail(email);
+        userDTO.setActivated(true);
+        userDTO.setLangKey("en");
+        userDTO.setFirstName("Test");
+        userDTO.setLastName("User");
+        userDTO.setAuthorities(Set.of("ROLE_USER"));
+        return userDTO;
     }
 }

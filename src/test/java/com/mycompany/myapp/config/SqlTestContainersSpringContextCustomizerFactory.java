@@ -50,6 +50,13 @@ public class SqlTestContainersSpringContextCustomizerFactory implements ContextC
                     );
                     testValues = testValues.and("spring.datasource.username=" + prodTestContainer.getTestContainer().getUsername());
                     testValues = testValues.and("spring.datasource.password=" + prodTestContainer.getTestContainer().getPassword());
+                    testValues = testValues.and(
+                        "spring.datasource.driver-class-name=" + prodTestContainer.getTestContainer().getDriverClassName()
+                    );
+                    testValues = testValues.and("spring.jpa.database-platform=org.hibernate.dialect.MySQLDialect");
+                    testValues = testValues.and("spring.jpa.hibernate.ddl-auto=none");
+                    testValues = testValues.and("spring.liquibase.enabled=true");
+                    testValues = testValues.and("spring.liquibase.drop-first=true");
                 }
                 testValues.applyTo(context);
             }

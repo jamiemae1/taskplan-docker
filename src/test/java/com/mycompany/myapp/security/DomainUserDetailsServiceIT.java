@@ -7,6 +7,7 @@ import com.mycompany.myapp.IntegrationTest;
 import com.mycompany.myapp.domain.User;
 import com.mycompany.myapp.repository.UserRepository;
 import com.mycompany.myapp.service.UserService;
+import com.mycompany.myapp.web.rest.TestUtil;
 import java.util.Locale;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +46,7 @@ class DomainUserDetailsServiceIT {
     public User getUserOne() {
         User userOne = new User();
         userOne.setLogin(USER_ONE_LOGIN);
-        userOne.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
+        userOne.setPassword(TestUtil.generateEncodedTestPassword());
         userOne.setActivated(true);
         userOne.setEmail(USER_ONE_EMAIL);
         userOne.setFirstName("userOne");
@@ -57,7 +58,7 @@ class DomainUserDetailsServiceIT {
     public User getUserTwo() {
         User userTwo = new User();
         userTwo.setLogin(USER_TWO_LOGIN);
-        userTwo.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
+        userTwo.setPassword(TestUtil.generateEncodedTestPassword());
         userTwo.setActivated(true);
         userTwo.setEmail(USER_TWO_EMAIL);
         userTwo.setFirstName("userTwo");
@@ -69,7 +70,7 @@ class DomainUserDetailsServiceIT {
     public User getUserThree() {
         User userThree = new User();
         userThree.setLogin(USER_THREE_LOGIN);
-        userThree.setPassword(RandomStringUtils.insecure().nextAlphanumeric(60));
+        userThree.setPassword(TestUtil.generateEncodedTestPassword());
         userThree.setActivated(false);
         userThree.setEmail(USER_THREE_EMAIL);
         userThree.setFirstName("userThree");

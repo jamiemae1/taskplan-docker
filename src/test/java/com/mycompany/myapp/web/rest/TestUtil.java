@@ -2,30 +2,65 @@ package com.mycompany.myapp.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Root;
-import java.lang.reflect.Method;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Objects;
 import org.hamcrest.Description;
 import org.hamcrest.TypeSafeDiagnosingMatcher;
 import org.hamcrest.TypeSafeMatcher;
-import org.springframework.cglib.proxy.Enhancer;
-import org.springframework.cglib.proxy.MethodInterceptor;
-import org.springframework.cglib.proxy.MethodProxy;
 import org.springframework.format.datetime.standard.DateTimeFormatterRegistrar;
 import org.springframework.format.support.DefaultFormattingConversionService;
 import org.springframework.format.support.FormattingConversionService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Utility class for testing REST controllers.
  */
 public final class TestUtil {
+
+    private static final ObjectMapper mapper = createObjectMapper();
+    private static final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+        mapper.registerModule(new JavaTimeModule());
+        return mapper;
+    }
+
+    /**
+     * Generate a properly encoded password for test users.
+     * @return A BCrypt encoded password that meets the 60 character requirement
+     */
+    public static String generateEncodedTestPassword() {
+        String rawPassword = "test-password";
+        return passwordEncoder.encode(rawPassword);
+    }
+
+    /**
+     * Convert an object to JSON byte array.
+     *
+     * @param object the object to convert.
+     * @return the JSON byte array.
+     * @throws IOException
+     */
+    public static byte[] convertObjectToJsonBytes(Object object) throws IOException {
+        return mapper.writeValueAsBytes(object);
+    }
 
     /**
      * Create a byte array with a specific size filled with specified data.
@@ -56,7 +91,7 @@ public final class TestUtil {
         @Override
         protected boolean matchesSafely(String item, Description mismatchDescription) {
             try {
-                if (!date.isEqual(ZonedDateTime.parse(item))) {
+                if (!date.equals(ZonedDateTime.parse(item))) {
                     mismatchDescription.appendText("was ").appendValue(item);
                     return false;
                 }
@@ -165,37 +200,56 @@ public final class TestUtil {
     }
 
     /**
-     * Executes a query on the EntityManager finding all stored objects.
+     * Makes a an executes a query to the EntityManager finding all stored objects.
      * @param <T> The type of objects to be searched
      * @param em The instance of the EntityManager
-     * @param clazz The class type to be searched
+     * @param clss The class type to be searched
      * @return A list of all found objects
      */
-    public static <T> List<T> findAll(EntityManager em, Class<T> clazz) {
+    public static <T> List<T> findAll(EntityManager em, Class<T> clss) {
         CriteriaBuilder cb = em.getCriteriaBuilder();
-        CriteriaQuery<T> cq = cb.createQuery(clazz);
-        Root<T> rootEntry = cq.from(clazz);
+        CriteriaQuery<T> cq = cb.createQuery(clss);
+        Root<T> rootEntry = cq.from(clss);
         CriteriaQuery<T> all = cq.select(rootEntry);
         TypedQuery<T> allQuery = em.createQuery(all);
         return allQuery.getResultList();
     }
 
-    @SuppressWarnings("unchecked")
-    public static <T> T createUpdateProxyForBean(T update, T original) {
-        Enhancer e = new Enhancer();
-        e.setSuperclass(original.getClass());
-        e.setCallback(
-            new MethodInterceptor() {
-                public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
-                    Object val = update.getClass().getMethod(method.getName(), method.getParameterTypes()).invoke(update, args);
-                    if (val == null) {
-                        return original.getClass().getMethod(method.getName(), method.getParameterTypes()).invoke(original, args);
-                    }
-                    return val;
+    /**
+     * Create a proxy object for updating an entity, copying only the fields that are different.
+     * This is useful for partial updates where we want to test that only changed fields are updated.
+     *
+     * @param original the original entity
+     * @param updated the updated entity
+     * @return a proxy object containing only the changed fields
+     */
+    public static <T> T createUpdateProxyForBean(T original, T updated) {
+        if (original == null || updated == null) {
+            return updated;
+        }
+
+        Class<?> clazz = original.getClass();
+        Object proxy = java.lang.reflect.Proxy.newProxyInstance(clazz.getClassLoader(), new Class<?>[] { clazz }, (p, method, args) -> {
+            String methodName = method.getName();
+            if (methodName.startsWith("get") || methodName.startsWith("is")) {
+                String propertyName = methodName.startsWith("get") ? methodName.substring(3) : methodName.substring(2);
+                propertyName = propertyName.substring(0, 1).toLowerCase() + propertyName.substring(1);
+
+                try {
+                    Object originalValue = method.invoke(original);
+                    Object updatedValue = method.invoke(updated);
+
+                    // Only return the updated value if it's different from the original
+                    return !Objects.equals(originalValue, updatedValue) ? updatedValue : originalValue;
+                } catch (Exception e) {
+                    return method.invoke(original);
                 }
             }
-        );
-        return (T) e.create();
+            // For non-getter methods, delegate to the original object
+            return method.invoke(original);
+        });
+
+        return (T) proxy;
     }
 
     private TestUtil() {}

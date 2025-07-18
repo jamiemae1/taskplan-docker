@@ -6,6 +6,7 @@ import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
 
@@ -26,6 +27,7 @@ public class Task implements Serializable {
     private Long id;
 
     @NotNull
+    @NotBlank
     @Size(max = 255)
     @Column(name = "description", length = 255, nullable = false)
     private String description;
@@ -33,21 +35,21 @@ public class Task implements Serializable {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "priority")
+    @Column(name = "priority", nullable = false)
     private TaskPriority priority;
 
-    @NotNull
     @Column(name = "completed", nullable = false)
-    private Boolean completed;
+    private Boolean completed = false;
 
-    @Column(name = "created_date", nullable = false)
+    @Column(name = "created_date")
     private Instant createdDate;
 
     @Column(name = "last_modified_date")
     private Instant lastModifiedDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     private User user;
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
@@ -114,7 +116,7 @@ public class Task implements Serializable {
     }
 
     public void setCompleted(Boolean completed) {
-        this.completed = completed;
+        this.completed = completed != null ? completed : false;
     }
 
     public Instant getCreatedDate() {
@@ -160,17 +162,11 @@ public class Task implements Serializable {
 
     @PrePersist
     protected void onCreate() {
-        if (this.createdDate == null) {
-            this.createdDate = Instant.now();
-        }
+        this.createdDate = Instant.now();
+        this.lastModifiedDate = this.createdDate;
         if (this.completed == null) {
             this.completed = false;
         }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.lastModifiedDate = Instant.now();
     }
 
     @Override
@@ -181,26 +177,40 @@ public class Task implements Serializable {
         if (!(o instanceof Task)) {
             return false;
         }
-        return getId() != null && getId().equals(((Task) o).getId());
+        Task task = (Task) o;
+        return id != null && id.equals(task.id);
     }
 
     @Override
     public int hashCode() {
-        // see https://vladmihalcea.com/how-to-implement-equals-and-hashcode-using-the-jpa-entity-identifier/
-        return getClass().hashCode();
+        return Objects.hash(id);
     }
 
-    // prettier-ignore
     @Override
     public String toString() {
-        return "Task{" +
-            "id=" + getId() +
-            ", description='" + getDescription() + "'" +
-            ", dueDate='" + getDueDate() + "'" +
-            ", priority='" + getPriority() + "'" +
-            ", completed='" + getCompleted() + "'" +
-            ", createdDate='" + getCreatedDate() + "'" +
-            ", lastModifiedDate='" + getLastModifiedDate() + "'" +
-            "}";
+        return (
+            "Task{" +
+            "id=" +
+            id +
+            ", description='" +
+            description +
+            "'" +
+            ", dueDate='" +
+            dueDate +
+            "'" +
+            ", priority=" +
+            priority +
+            ", completed=" +
+            completed +
+            ", createdDate='" +
+            createdDate +
+            "'" +
+            ", lastModifiedDate='" +
+            lastModifiedDate +
+            "'" +
+            ", user=" +
+            (user != null ? user.getLogin() : "null") +
+            "}"
+        );
     }
 }

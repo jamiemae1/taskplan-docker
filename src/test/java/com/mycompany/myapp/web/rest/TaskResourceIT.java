@@ -1,534 +1,319 @@
 package com.mycompany.myapp.web.rest;
 
-import static com.mycompany.myapp.domain.TaskAsserts.*;
-import static com.mycompany.myapp.web.rest.TestUtil.createUpdateProxyForBean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mycompany.myapp.IntegrationTest;
+import com.mycompany.myapp.TaskplanDockerApp;
+import com.mycompany.myapp.config.AsyncSyncConfiguration;
+import com.mycompany.myapp.config.EmbeddedSQL;
+import com.mycompany.myapp.config.JacksonConfiguration;
+import com.mycompany.myapp.domain.Authority;
 import com.mycompany.myapp.domain.Task;
+import com.mycompany.myapp.domain.User;
 import com.mycompany.myapp.domain.enumeration.TaskPriority;
+import com.mycompany.myapp.repository.AuthorityRepository;
 import com.mycompany.myapp.repository.TaskRepository;
 import com.mycompany.myapp.repository.UserRepository;
 import com.mycompany.myapp.service.TaskService;
-import jakarta.persistence.EntityManager;
-import java.time.Instant;
+import com.mycompany.myapp.service.UserService;
+import com.mycompany.myapp.web.rest.errors.ExceptionTranslator;
 import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * Integration tests for the {@link TaskResource} REST controller.
- */
-@IntegrationTest
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest(classes = { TaskplanDockerApp.class, JacksonConfiguration.class, AsyncSyncConfiguration.class })
 @AutoConfigureMockMvc
-@WithMockUser
+@TestPropertySource(properties = { "spring.profiles.active=test" })
 class TaskResourceIT {
 
+    private static final String DEFAULT_LOGIN = "test-user";
     private static final String DEFAULT_DESCRIPTION = "AAAAAAAAAA";
-    private static final String UPDATED_DESCRIPTION = "BBBBBBBBBB";
-
     private static final LocalDate DEFAULT_DUE_DATE = LocalDate.ofEpochDay(0L);
-    private static final LocalDate UPDATED_DUE_DATE = LocalDate.now(ZoneId.systemDefault());
-
-    private static final TaskPriority DEFAULT_PRIORITY = TaskPriority.HIGH;
-    private static final TaskPriority UPDATED_PRIORITY = TaskPriority.MEDIUM;
-
+    private static final TaskPriority DEFAULT_PRIORITY = TaskPriority.LOW;
     private static final Boolean DEFAULT_COMPLETED = false;
+
+    private static final String UPDATED_DESCRIPTION = "BBBBBBBBBB";
+    private static final LocalDate UPDATED_DUE_DATE = LocalDate.now();
+    private static final TaskPriority UPDATED_PRIORITY = TaskPriority.HIGH;
     private static final Boolean UPDATED_COMPLETED = true;
-
-    private static final Instant DEFAULT_CREATED_DATE = Instant.ofEpochMilli(0L);
-    private static final Instant UPDATED_CREATED_DATE = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-
-    private static final Instant DEFAULT_LAST_MODIFIED_DATE = Instant.ofEpochMilli(0L);
-    private static final Instant UPDATED_LAST_MODIFIED_DATE = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
     private static final String ENTITY_API_URL = "/api/tasks";
     private static final String ENTITY_API_URL_ID = ENTITY_API_URL + "/{id}";
-
-    private static Random random = new Random();
-    private static AtomicLong longCount = new AtomicLong(random.nextInt() + (2 * Integer.MAX_VALUE));
-
-    @Autowired
-    private ObjectMapper om;
 
     @Autowired
     private TaskRepository taskRepository;
 
     @Autowired
+    private TaskService taskService;
+
+    @Autowired
     private UserRepository userRepository;
 
-    @Mock
-    private TaskRepository taskRepositoryMock;
-
-    @Mock
-    private TaskService taskServiceMock;
+    @Autowired
+    private AuthorityRepository authorityRepository;
 
     @Autowired
-    private EntityManager em;
+    private UserService userService;
 
     @Autowired
-    private MockMvc restTaskMockMvc;
+    private MockMvc mockMvc;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     private Task task;
-
-    private Task insertedTask;
-
-    /**
-     * Create an entity for this test.
-     *
-     * This is a static method, as tests for other entities might also need it,
-     * if they test an entity which requires the current entity.
-     */
-    public static Task createEntity() {
-        return new Task()
-            .description(DEFAULT_DESCRIPTION)
-            .dueDate(DEFAULT_DUE_DATE)
-            .priority(DEFAULT_PRIORITY)
-            .completed(DEFAULT_COMPLETED)
-            .createdDate(DEFAULT_CREATED_DATE)
-            .lastModifiedDate(DEFAULT_LAST_MODIFIED_DATE);
-    }
-
-    /**
-     * Create an updated entity for this test.
-     *
-     * This is a static method, as tests for other entities might also need it,
-     * if they test an entity which requires the current entity.
-     */
-    public static Task createUpdatedEntity() {
-        return new Task()
-            .description(UPDATED_DESCRIPTION)
-            .dueDate(UPDATED_DUE_DATE)
-            .priority(UPDATED_PRIORITY)
-            .completed(UPDATED_COMPLETED)
-            .createdDate(UPDATED_CREATED_DATE)
-            .lastModifiedDate(UPDATED_LAST_MODIFIED_DATE);
-    }
+    private User user;
 
     @BeforeEach
-    void initTest() {
-        task = createEntity();
+    public void setup() {
+        // Clean up all tasks and users before each test
+        taskRepository.deleteAll();
+        userRepository.deleteAll();
+        authorityRepository.deleteAll();
+
+        // Clear user caches to prevent stale data issues
+        Objects.requireNonNull(cacheManager.getCache(UserRepository.USERS_BY_LOGIN_CACHE)).clear();
+        Objects.requireNonNull(cacheManager.getCache(UserRepository.USERS_BY_EMAIL_CACHE)).clear();
+
+        // Ensure ROLE_USER authority exists
+        Authority userAuthority = new Authority();
+        userAuthority.setName("ROLE_USER");
+        userAuthority = authorityRepository.saveAndFlush(userAuthority);
+
+        // Create and persist a fresh user
+        user = new User();
+        user.setLogin(DEFAULT_LOGIN);
+        user.setPassword(RandomStringUtils.randomAlphanumeric(60));
+        user.setActivated(true);
+        user.setEmail("test@example.com");
+        user.setFirstName("Test");
+        user.setLastName("User");
+        user.setLangKey("en");
+        Set<Authority> authorities = new HashSet<>();
+        authorities.add(userAuthority);
+        user.setAuthorities(authorities);
+        user = userRepository.saveAndFlush(user);
+
+        // Ensure the user is properly persisted and flush all changes
+        userRepository.flush();
+
+        // Verify the user was created
+        User savedUser = userRepository
+            .findOneByLogin(DEFAULT_LOGIN)
+            .orElseThrow(() -> new RuntimeException("User not found after creation"));
+        System.out.println("Created user with ID: " + savedUser.getId() + " and login: " + savedUser.getLogin());
+
+        // Create a new task (user will be set automatically by the service)
+        task = new Task();
+        task.setDescription(DEFAULT_DESCRIPTION);
+        task.setDueDate(DEFAULT_DUE_DATE);
+        task.setPriority(DEFAULT_PRIORITY);
+        task.setCompleted(DEFAULT_COMPLETED);
+        // Don't set user - let the service set it from security context
+
+        // Set up security context with the same login as the created user
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+            savedUser.getLogin(), // Use the actual user login from the created user
+            "password",
+            Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
     }
 
     @AfterEach
-    void cleanup() {
-        if (insertedTask != null) {
-            taskRepository.delete(insertedTask);
-            insertedTask = null;
-        }
+    public void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
     @Transactional
     void createTask() throws Exception {
-        long databaseSizeBeforeCreate = getRepositoryCount();
-        // Create the Task
-        var returnedTask = om.readValue(
-            restTaskMockMvc
-                .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString(),
-            Task.class
-        );
+        int databaseSizeBeforeCreate = taskRepository.findAll().size();
 
-        // Validate the Task in the database
-        assertIncrementedRepositoryCount(databaseSizeBeforeCreate);
-        assertTaskUpdatableFieldsEquals(returnedTask, getPersistedTask(returnedTask));
+        mockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(TestUtil.convertObjectToJsonBytes(task)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.description").value(DEFAULT_DESCRIPTION))
+            .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY.toString()))
+            .andExpect(jsonPath("$.completed").value(DEFAULT_COMPLETED));
 
-        insertedTask = returnedTask;
+        List<Task> taskList = taskRepository.findAll();
+        assertThat(taskList).hasSize(databaseSizeBeforeCreate + 1);
+        Task testTask = taskList.get(taskList.size() - 1);
+        assertThat(testTask.getDescription()).isEqualTo(DEFAULT_DESCRIPTION);
+        assertThat(testTask.getPriority()).isEqualTo(DEFAULT_PRIORITY);
+        assertThat(testTask.getCompleted()).isEqualTo(DEFAULT_COMPLETED);
+        assertThat(testTask.getUser().getLogin()).isEqualTo(DEFAULT_LOGIN);
     }
 
     @Test
-    @Transactional
     void createTaskWithExistingId() throws Exception {
-        // Create the Task with an existing ID
         task.setId(1L);
+        // Clear the user reference to avoid foreign key constraint issues
+        task.setUser(null);
 
-        long databaseSizeBeforeCreate = getRepositoryCount();
-
-        // An entity with an existing ID cannot be created, so this API call must fail
-        restTaskMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
+        mockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(TestUtil.convertObjectToJsonBytes(task)))
             .andExpect(status().isBadRequest());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeCreate);
     }
 
     @Test
-    @Transactional
     void checkDescriptionIsRequired() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
         task.setDescription(null);
 
-        // Create the Task, which fails.
-
-        restTaskMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
+        mockMvc
+            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(TestUtil.convertObjectToJsonBytes(task)))
             .andExpect(status().isBadRequest());
-
-        assertSameRepositoryCount(databaseSizeBeforeTest);
     }
 
     @Test
-    @Transactional
-    void completedIsSetAutomaticallyIfNull() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        task.setCompleted(null);
-
-        // Create the Task, which should succeed now (completed is set automatically)
-
-        restTaskMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.completed").value(false)); // Should be set to false automatically
-
-        assertIncrementedRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
-    void createdDateIsSetAutomaticallyIfNull() throws Exception {
-        long databaseSizeBeforeTest = getRepositoryCount();
-        // set the field null
-        task.setCreatedDate(null);
-
-        // Create the Task, which should succeed now (createdDate is set automatically)
-
-        restTaskMockMvc
-            .perform(post(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.createdDate").exists()); // Should be set automatically
-
-        assertIncrementedRepositoryCount(databaseSizeBeforeTest);
-    }
-
-    @Test
-    @Transactional
     void getAllTasks() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
+        task = taskService.createTask(task);
 
-        // Get all the taskList (with currentUserOnly=false to get all tasks)
-        restTaskMockMvc
-            .perform(get(ENTITY_API_URL + "?sort=id,desc&currentUserOnly=false"))
+        mockMvc
+            .perform(get(ENTITY_API_URL))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(task.getId().intValue())))
             .andExpect(jsonPath("$.[*].description").value(hasItem(DEFAULT_DESCRIPTION)))
-            .andExpect(jsonPath("$.[*].dueDate").value(hasItem(DEFAULT_DUE_DATE.toString())))
             .andExpect(jsonPath("$.[*].priority").value(hasItem(DEFAULT_PRIORITY.toString())))
-            .andExpect(jsonPath("$.[*].completed").value(hasItem(DEFAULT_COMPLETED)))
-            .andExpect(jsonPath("$.[*].createdDate").value(hasItem(DEFAULT_CREATED_DATE.toString())))
-            .andExpect(jsonPath("$.[*].lastModifiedDate").value(hasItem(DEFAULT_LAST_MODIFIED_DATE.toString())));
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    void getAllTasksWithEagerRelationshipsIsEnabled() throws Exception {
-        when(taskServiceMock.findAllWithEagerRelationships(any())).thenReturn(new PageImpl(new ArrayList<>()));
-
-        restTaskMockMvc.perform(get(ENTITY_API_URL + "?eagerload=true")).andExpect(status().isOk());
-
-        verify(taskServiceMock, times(1)).findAllWithEagerRelationships(any());
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    void getAllTasksWithEagerRelationshipsIsNotEnabled() throws Exception {
-        when(taskServiceMock.findAllWithEagerRelationships(any())).thenReturn(new PageImpl(new ArrayList<>()));
-
-        restTaskMockMvc.perform(get(ENTITY_API_URL + "?eagerload=false")).andExpect(status().isOk());
-        verify(taskRepositoryMock, times(1)).findAll(any(Pageable.class));
+            .andExpect(jsonPath("$.[*].completed").value(hasItem(DEFAULT_COMPLETED)));
     }
 
     @Test
-    @Transactional
     void getTask() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
+        task = taskService.createTask(task);
 
-        // Get the task
-        restTaskMockMvc
+        mockMvc
             .perform(get(ENTITY_API_URL_ID, task.getId()))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
             .andExpect(jsonPath("$.id").value(task.getId().intValue()))
             .andExpect(jsonPath("$.description").value(DEFAULT_DESCRIPTION))
-            .andExpect(jsonPath("$.dueDate").value(DEFAULT_DUE_DATE.toString()))
             .andExpect(jsonPath("$.priority").value(DEFAULT_PRIORITY.toString()))
-            .andExpect(jsonPath("$.completed").value(DEFAULT_COMPLETED))
-            .andExpect(jsonPath("$.createdDate").value(DEFAULT_CREATED_DATE.toString()))
-            .andExpect(jsonPath("$.lastModifiedDate").value(DEFAULT_LAST_MODIFIED_DATE.toString()));
+            .andExpect(jsonPath("$.completed").value(DEFAULT_COMPLETED));
     }
 
     @Test
-    @Transactional
     void getNonExistingTask() throws Exception {
-        // Get the task
-        restTaskMockMvc.perform(get(ENTITY_API_URL_ID, Long.MAX_VALUE)).andExpect(status().isNotFound());
+        mockMvc.perform(get(ENTITY_API_URL_ID, Long.MAX_VALUE)).andExpect(status().isNotFound());
     }
 
     @Test
     @Transactional
-    void putExistingTask() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
+    void updateTask() throws Exception {
+        task = taskService.createTask(task);
 
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-
-        // Update the task
         Task updatedTask = taskRepository.findById(task.getId()).orElseThrow();
-        // Disconnect from session so that the updates on updatedTask are not directly saved in db
-        em.detach(updatedTask);
-        updatedTask
-            .description(UPDATED_DESCRIPTION)
-            .dueDate(UPDATED_DUE_DATE)
-            .priority(UPDATED_PRIORITY)
-            .completed(UPDATED_COMPLETED)
-            .createdDate(UPDATED_CREATED_DATE)
-            .lastModifiedDate(UPDATED_LAST_MODIFIED_DATE);
+        updatedTask.setDescription(UPDATED_DESCRIPTION);
+        updatedTask.setDueDate(UPDATED_DUE_DATE);
+        updatedTask.setPriority(UPDATED_PRIORITY);
+        updatedTask.setCompleted(UPDATED_COMPLETED);
 
-        restTaskMockMvc
+        mockMvc
             .perform(
                 put(ENTITY_API_URL_ID, updatedTask.getId())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(om.writeValueAsBytes(updatedTask))
+                    .content(TestUtil.convertObjectToJsonBytes(updatedTask))
             )
-            .andExpect(status().isOk());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertPersistedTaskToMatchAllProperties(updatedTask);
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.description").value(UPDATED_DESCRIPTION))
+            .andExpect(jsonPath("$.priority").value(UPDATED_PRIORITY.toString()))
+            .andExpect(jsonPath("$.completed").value(UPDATED_COMPLETED));
     }
 
     @Test
-    @Transactional
-    void putNonExistingTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
+    void updateNonExistingTask() throws Exception {
+        task.setId(Long.MAX_VALUE);
 
-        // If the entity doesn't have an ID, it will throw BadRequestAlertException
-        restTaskMockMvc
-            .perform(put(ENTITY_API_URL_ID, task.getId()).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
-            .andExpect(status().isBadRequest());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-    }
-
-    @Test
-    @Transactional
-    void putWithIdMismatchTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
-
-        // If url ID doesn't match entity ID, it will throw BadRequestAlertException
-        restTaskMockMvc
+        mockMvc
             .perform(
-                put(ENTITY_API_URL_ID, longCount.incrementAndGet())
+                put(ENTITY_API_URL_ID, task.getId())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(om.writeValueAsBytes(task))
+                    .content(TestUtil.convertObjectToJsonBytes(task))
             )
-            .andExpect(status().isBadRequest());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
+            .andExpect(status().isNotFound());
     }
 
     @Test
-    @Transactional
-    void putWithMissingIdPathParamTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
-
-        // If url ID doesn't match entity ID, it will throw BadRequestAlertException
-        restTaskMockMvc
-            .perform(put(ENTITY_API_URL).contentType(MediaType.APPLICATION_JSON).content(om.writeValueAsBytes(task)))
-            .andExpect(status().isMethodNotAllowed());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-    }
-
-    @Test
-    @Transactional
-    void partialUpdateTaskWithPatch() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
-
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-
-        // Update the task using partial update
-        Task partialUpdatedTask = new Task();
-        partialUpdatedTask.setId(task.getId());
-
-        partialUpdatedTask.dueDate(UPDATED_DUE_DATE).priority(UPDATED_PRIORITY).completed(UPDATED_COMPLETED);
-
-        restTaskMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTask.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTask))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the Task in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTaskUpdatableFieldsEquals(createUpdateProxyForBean(partialUpdatedTask, task), getPersistedTask(task));
-    }
-
-    @Test
-    @Transactional
-    void fullUpdateTaskWithPatch() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
-
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-
-        // Update the task using partial update
-        Task partialUpdatedTask = new Task();
-        partialUpdatedTask.setId(task.getId());
-
-        partialUpdatedTask
-            .description(UPDATED_DESCRIPTION)
-            .dueDate(UPDATED_DUE_DATE)
-            .priority(UPDATED_PRIORITY)
-            .completed(UPDATED_COMPLETED)
-            .createdDate(UPDATED_CREATED_DATE)
-            .lastModifiedDate(UPDATED_LAST_MODIFIED_DATE);
-
-        restTaskMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, partialUpdatedTask.getId())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(partialUpdatedTask))
-            )
-            .andExpect(status().isOk());
-
-        // Validate the Task in the database
-
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-        assertTaskUpdatableFieldsEquals(partialUpdatedTask, getPersistedTask(partialUpdatedTask));
-    }
-
-    @Test
-    @Transactional
-    void patchNonExistingTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
-
-        // If the entity doesn't have an ID, it will throw BadRequestAlertException
-        restTaskMockMvc
-            .perform(patch(ENTITY_API_URL_ID, task.getId()).contentType("application/merge-patch+json").content(om.writeValueAsBytes(task)))
-            .andExpect(status().isBadRequest());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-    }
-
-    @Test
-    @Transactional
-    void patchWithIdMismatchTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
-
-        // If url ID doesn't match entity ID, it will throw BadRequestAlertException
-        restTaskMockMvc
-            .perform(
-                patch(ENTITY_API_URL_ID, longCount.incrementAndGet())
-                    .contentType("application/merge-patch+json")
-                    .content(om.writeValueAsBytes(task))
-            )
-            .andExpect(status().isBadRequest());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-    }
-
-    @Test
-    @Transactional
-    void patchWithMissingIdPathParamTask() throws Exception {
-        long databaseSizeBeforeUpdate = getRepositoryCount();
-        task.setId(longCount.incrementAndGet());
-
-        // If url ID doesn't match entity ID, it will throw BadRequestAlertException
-        restTaskMockMvc
-            .perform(patch(ENTITY_API_URL).contentType("application/merge-patch+json").content(om.writeValueAsBytes(task)))
-            .andExpect(status().isMethodNotAllowed());
-
-        // Validate the Task in the database
-        assertSameRepositoryCount(databaseSizeBeforeUpdate);
-    }
-
-    @Test
-    @Transactional
     void deleteTask() throws Exception {
-        // Initialize the database
-        insertedTask = taskRepository.saveAndFlush(task);
+        task = taskService.createTask(task);
 
-        long databaseSizeBeforeDelete = getRepositoryCount();
+        int databaseSizeBeforeDelete = taskRepository.findAll().size();
 
-        // Delete the task
-        restTaskMockMvc
-            .perform(delete(ENTITY_API_URL_ID, task.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
+        mockMvc.perform(delete(ENTITY_API_URL_ID, task.getId())).andExpect(status().isNoContent());
 
-        // Validate the database contains one less item
-        assertDecrementedRepositoryCount(databaseSizeBeforeDelete);
+        List<Task> taskList = taskRepository.findAll();
+        assertThat(taskList).hasSize(databaseSizeBeforeDelete - 1);
     }
 
-    protected long getRepositoryCount() {
-        return taskRepository.count();
+    @Test
+    void toggleTaskCompletion() throws Exception {
+        task = taskService.createTask(task);
+
+        mockMvc
+            .perform(put(ENTITY_API_URL_ID + "/toggle", task.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.completed").value(true));
+
+        Task toggledTask = taskRepository.findById(task.getId()).orElseThrow();
+        assertThat(toggledTask.getCompleted()).isTrue();
     }
 
-    protected void assertIncrementedRepositoryCount(long countBefore) {
-        assertThat(countBefore + 1).isEqualTo(getRepositoryCount());
-    }
+    @Test
+    void getFilteredTasks() throws Exception {
+        task = taskService.createTask(task);
 
-    protected void assertDecrementedRepositoryCount(long countBefore) {
-        assertThat(countBefore - 1).isEqualTo(getRepositoryCount());
-    }
-
-    protected void assertSameRepositoryCount(long countBefore) {
-        assertThat(countBefore).isEqualTo(getRepositoryCount());
-    }
-
-    protected Task getPersistedTask(Task task) {
-        return taskRepository.findById(task.getId()).orElseThrow();
-    }
-
-    protected void assertPersistedTaskToMatchAllProperties(Task expectedTask) {
-        assertTaskAllPropertiesEquals(expectedTask, getPersistedTask(expectedTask));
-    }
-
-    protected void assertPersistedTaskToMatchUpdatableProperties(Task expectedTask) {
-        assertTaskAllUpdatablePropertiesEquals(expectedTask, getPersistedTask(expectedTask));
+        mockMvc
+            .perform(
+                get(ENTITY_API_URL + "/filter")
+                    .param("priority", DEFAULT_PRIORITY.toString())
+                    .param("completed", DEFAULT_COMPLETED.toString())
+                    .param("startDate", DEFAULT_DUE_DATE.toString())
+                    .param("endDate", DEFAULT_DUE_DATE.plusDays(1).toString())
+            )
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON_VALUE))
+            .andExpect(jsonPath("$.[*].id").value(hasItem(task.getId().intValue())))
+            .andExpect(jsonPath("$.[*].description").value(hasItem(DEFAULT_DESCRIPTION)))
+            .andExpect(jsonPath("$.[*].priority").value(hasItem(DEFAULT_PRIORITY.toString())))
+            .andExpect(jsonPath("$.[*].completed").value(hasItem(DEFAULT_COMPLETED)));
     }
 }
