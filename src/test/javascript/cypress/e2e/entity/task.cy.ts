@@ -15,7 +15,7 @@ describe('Task e2e test', () => {
   const taskPageUrlPattern = new RegExp('/task(\\?.*)?$');
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
-  const taskSample = { description: 'oof modulo', completed: true, createdDate: '2025-06-17T14:41:05.796Z' };
+  const taskSample = { description: 'oof modulo', priority: 'MEDIUM', completed: true, createdDate: '2025-06-17T14:41:05.796Z' };
 
   let task;
 
