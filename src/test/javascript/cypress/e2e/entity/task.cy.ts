@@ -172,14 +172,6 @@ describe('Task e2e test', () => {
       cy.get(`[data-cy="completed"]`).click();
       cy.get(`[data-cy="completed"]`).should('be.checked');
 
-      cy.get(`[data-cy="createdDate"]`).type('2025-06-17T09:48');
-      cy.get(`[data-cy="createdDate"]`).blur();
-      cy.get(`[data-cy="createdDate"]`).should('have.value', '2025-06-17T09:48');
-
-      cy.get(`[data-cy="lastModifiedDate"]`).type('2025-06-17T07:11');
-      cy.get(`[data-cy="lastModifiedDate"]`).blur();
-      cy.get(`[data-cy="lastModifiedDate"]`).should('have.value', '2025-06-17T07:11');
-
       cy.get(entityCreateSaveButtonSelector).click();
 
       cy.wait('@postEntityRequest').then(({ response }) => {

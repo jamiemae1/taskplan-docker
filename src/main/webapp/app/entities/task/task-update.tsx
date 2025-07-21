@@ -140,8 +140,8 @@ export const TaskUpdate = () => {
                 type="checkbox"
               />
               {/* Hidden fields for created/modified dates - managed by backend */}
-              <input type="hidden" name="createdDate" value={taskEntity.createdDate || ''} />
-              <input type="hidden" name="lastModifiedDate" value={taskEntity.lastModifiedDate || ''} />
+              <input type="hidden" name="createdDate" data-cy="createdDate" value={taskEntity.createdDate || ''} />
+              <input type="hidden" name="lastModifiedDate" data-cy="lastModifiedDate" value={taskEntity.lastModifiedDate || ''} />
               {/* Hide user selection for better UX - tasks belong to current user */}
               <input type="hidden" name="user" value={users?.[0]?.id || ''} />
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/task" replace color="info">
