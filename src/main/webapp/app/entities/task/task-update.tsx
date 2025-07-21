@@ -4,7 +4,6 @@ import { Button, Col, Row } from 'reactstrap';
 import { Translate, ValidatedField, ValidatedForm, translate } from 'react-jhipster';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-import { convertDateTimeFromServer, convertDateTimeToServer, displayDefaultDateTime } from 'app/shared/util/date-utils';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 
 import { getUsers } from 'app/modules/administration/user-management/user-management.reducer';
@@ -50,8 +49,6 @@ export const TaskUpdate = () => {
     if (values.id !== undefined && typeof values.id !== 'number') {
       values.id = Number(values.id);
     }
-    values.createdDate = convertDateTimeToServer(values.createdDate);
-    values.lastModifiedDate = convertDateTimeToServer(values.lastModifiedDate);
 
     const entity = {
       ...taskEntity,
@@ -75,8 +72,6 @@ export const TaskUpdate = () => {
       : {
           priority: 'HIGH',
           ...taskEntity,
-          createdDate: convertDateTimeFromServer(taskEntity.createdDate),
-          lastModifiedDate: convertDateTimeFromServer(taskEntity.lastModifiedDate),
           user: taskEntity?.user?.id,
         };
 
@@ -144,22 +139,9 @@ export const TaskUpdate = () => {
                 check
                 type="checkbox"
               />
-              <ValidatedField
-                label={translate('taskplanDockerApp.task.createdDate')}
-                id="task-createdDate"
-                name="createdDate"
-                data-cy="createdDate"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-              />
-              <ValidatedField
-                label={translate('taskplanDockerApp.task.lastModifiedDate')}
-                id="task-lastModifiedDate"
-                name="lastModifiedDate"
-                data-cy="lastModifiedDate"
-                type="datetime-local"
-                placeholder="YYYY-MM-DD HH:mm"
-              />
+              {/* Hidden fields for created/modified dates - managed by backend */}
+              <input type="hidden" name="createdDate" value={taskEntity.createdDate || ''} />
+              <input type="hidden" name="lastModifiedDate" value={taskEntity.lastModifiedDate || ''} />
               {/* Hide user selection for better UX - tasks belong to current user */}
               <input type="hidden" name="user" value={users?.[0]?.id || ''} />
               <Button tag={Link} id="cancel-save" data-cy="entityCreateCancelButton" to="/task" replace color="info">
