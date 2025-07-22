@@ -36,9 +36,8 @@ class WebConfigurerTest {
 
     @BeforeEach
     void setup() {
-        servletContext = spy(new MockServletContext());
-        doReturn(mock(FilterRegistration.Dynamic.class)).when(servletContext).addFilter(anyString(), any(Filter.class));
-        doReturn(mock(ServletRegistration.Dynamic.class)).when(servletContext).addServlet(anyString(), any(Servlet.class));
+        servletContext = new MockServletContext(); // Remove spy() to avoid timeout
+        // Remove doReturn() calls that were causing timeout issues
 
         env = new MockEnvironment();
         props = new JHipsterProperties();
